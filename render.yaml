@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: uet-phdhub-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: tuyenkv@vnu.edu.vn
+      - key: ALLOW_DEV_LOGIN
+        value: "false"
+      - key: SEED_DEMO
+        value: "false"
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: DB_PROVIDER
+        value: d1
+      - key: CLOUDFLARE_ACCOUNT_ID
+        value: 45ac1d4c947c9bee3f0e06c0823497d7
+      - key: CLOUDFLARE_DATABASE_ID
+        value: 23107947-b363-4a0f-acd0-32359db59884
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: R2_ACCOUNT_ID
+        value: 45ac1d4c947c9bee3f0e06c0823497d7
+      - key: R2_BUCKET
+        value: uet-phdhub-documents
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_DAILY_SEND_CAP
+        value: "250"
+      - key: EMAIL_BATCH_SIZE
+        value: "25"
+      - key: EMAIL_SEND_IMMEDIATE
+        value: "false"

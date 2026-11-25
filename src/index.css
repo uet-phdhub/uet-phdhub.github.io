@@ -1,0 +1,276 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --uet-brand: #034ea1;
+  --uet-brand-hover: #023b7c;
+  --uet-canvas: #f8fafc;
+  --uet-surface: #ffffff;
+  --uet-border: #e2e8f0;
+  --uet-border-strong: #cbd5e1;
+  --uet-text: #0f172a;
+  --uet-text-muted: #64748b;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--uet-canvas);
+  color: var(--uet-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Official UET Top Header Gradient (Restored from fit-uet) */
+.uet-header {
+  background: linear-gradient(110deg, #064889 0%, #075fc7 62%, #1473e6 100%);
+  box-shadow: 0 2px 12px rgba(6, 72, 137, 0.14);
+}
+
+/* Clean Administrative Inputs */
+:is(.workspace-content, .uet-modal, .uet-drawer, .uet-popover) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([cmdk-input]),
+  select,
+  textarea) {
+  width: 100%;
+  border: 1px solid var(--uet-border-strong);
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: var(--uet-text);
+  padding: 0.4375rem 0.6875rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+:is(.workspace-content, .uet-modal, .uet-drawer, .uet-popover) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([cmdk-input]),
+  select
+) {
+  height: 36px;
+}
+
+:is(.workspace-content, .uet-modal, .uet-drawer, .uet-popover) :is(input, select, textarea)::placeholder {
+  color: #94a3b8;
+}
+
+:is(.workspace-content, .uet-modal, .uet-drawer, .uet-popover) :is(input, select, textarea):focus {
+  outline: none;
+  border-color: var(--uet-brand);
+  box-shadow: 0 0 0 3px rgba(3, 78, 161, 0.14);
+}
+
+:is(.workspace-content, .uet-modal, .uet-drawer, .uet-popover) :is(input, select, textarea):disabled {
+  background-color: #f8fafc;
+  color: #64748b;
+  border-color: var(--uet-border);
+  cursor: default;
+}
+
+/* Clean Table */
+@layer components {
+  .uet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .uet-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background-color: #f8fafc;
+    border-bottom: 1px solid var(--uet-border);
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .uet-table tbody td {
+    border-bottom: 1px solid #f1f5f9;
+    color: #0f172a;
+    vertical-align: middle;
+  }
+
+  .uet-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .uet-table tbody tr:hover {
+    background-color: #f8fafc;
+  }
+}
+
+/* Radix Overlays, Modals, Drawers */
+@keyframes uet-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes uet-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes uet-zoom-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.uet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(1px);
+  animation: uet-fade-in 120ms ease-out;
+}
+
+.uet-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 51;
+  background: #ffffff;
+  border: 1px solid var(--uet-border);
+  border-radius: 10px;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.14);
+  animation: uet-zoom-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.uet-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  width: min(520px, 95vw);
+  background: #ffffff;
+  border-left: 1px solid var(--uet-border);
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.08);
+  animation: uet-slide-in-right 170ms cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Clean Underline Tabs (fit-uet CampaignChrome style) */
+.uet-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--uet-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.uet-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
+.uet-tab-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.uet-tab-trigger:hover {
+  color: #0f172a;
+}
+
+.uet-tab-trigger--active {
+  color: var(--uet-brand);
+  font-weight: 600;
+  border-bottom-color: var(--uet-brand);
+}
+
+/* Command Palette */
+[cmdk-list] { max-height: 360px; overflow-y: auto; }
+[cmdk-group-heading] {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+[cmdk-item] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.125rem 0.375rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+[cmdk-item][data-selected="true"] {
+  background: #eff6ff;
+  color: #034ea1;
+}

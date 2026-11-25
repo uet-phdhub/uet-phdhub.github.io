@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.storage/
+*.db
+*.db-shm
+*.db-wal
+*.log
+.DS_Store
+Phần mềm quản lý NCS.docx

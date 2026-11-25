@@ -1,0 +1,32 @@
+name: Daily PhD Deadlines Scan & Email Queue
+
+on:
+  schedule:
+    # 07:05 Asia/Ho_Chi_Minh = 00:05 UTC
+    - cron: '5 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  daily-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake Render API & scan PhD deadlines
+        env:
+          API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || vars.VITE_API_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$API_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Missing VITE_API_BASE_URL or CRON_SECRET"
+            exit 1
+          fi
+          API_BASE_URL="${API_BASE_URL%/}"
+          # Warm up Render Free instance in case it was sleeping
+          curl --silent --show-error --retry 4 --retry-all-errors --retry-delay 15 --max-time 60 \
+            "$API_BASE_URL/api/health" > /dev/null
+          curl --fail-with-body --retry 2 --retry-delay 5 --max-time 90 \
+            --request POST \
+            --header "X-Cron-Secret: $CRON_SECRET" \
+            "$API_BASE_URL/api/cron/process-email-queue"
