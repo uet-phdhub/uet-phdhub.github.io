@@ -25,7 +25,7 @@ services:
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
       - key: CORS_ORIGIN
-        sync: false
+        value: https://uet-phdhub.github.io
       - key: DB_PROVIDER
         value: d1
       - key: CLOUDFLARE_ACCOUNT_ID
