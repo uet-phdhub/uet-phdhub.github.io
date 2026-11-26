@@ -1,4 +1,4 @@
-import { ArrowUpRight, Save, Trash2 } from 'lucide-react';
+import { ArrowUpRight, FileText, Save, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -12,7 +12,7 @@ import {
 } from '../../shared/regulation3638';
 import type { AuthUser, AuthorRole, PublicationType, StudyStatus, SupervisionRole } from '../../shared/types';
 import type { AppCatalogs } from '../App';
-import { apiFetch } from '../shared/api';
+import { apiFetch, downloadBlob } from '../shared/api';
 import { Button, ConfirmDialog, Field, PageTop, Panel, StatusDot, Tag } from '../shared/ui';
 
 export function SupervisorPortalPage({ user: _user, catalogs }: { user: AuthUser; catalogs: AppCatalogs }) {
@@ -109,6 +109,22 @@ export function SupervisorPortalPage({ user: _user, catalogs }: { user: AuthUser
       <PageTop
         title={`${me.title_display} ${me.full_name}`}
         meta={me.work_unit || undefined}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              leadingIcon={<FileText size={14} />}
+              onClick={() => downloadBlob(`/api/forms/scientist/${me.id}/cv-5y`, `UET_LLKH_5Nam_${me.id}.docx`).then(() => toast.success('Đã xuất Lý lịch khoa học 5 năm (.docx).'))}
+            >
+              Lý lịch KH 5 năm (.docx)
+            </Button>
+            {q.eligibleForSpecialRequest && !q.isSpecialApproved && (
+              <Button variant="primary" leadingIcon={<Sparkles size={14} />} onClick={() => navigate('/requests?new=special_quota')}>
+                Đề nghị tăng định mức
+              </Button>
+            )}
+          </>
+        }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

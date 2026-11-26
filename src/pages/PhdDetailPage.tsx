@@ -1,13 +1,19 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
   Copy,
   ExternalLink,
+  FileText,
   Link as LinkIcon,
   Lock,
   Plus,
   Save,
+  Search,
+  ShieldCheck,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -34,7 +40,7 @@ import type {
   TrainingChangeItem,
 } from '../../shared/types';
 import type { AppCatalogs } from '../App';
-import { apiFetch, getDocumentViewUrl } from '../shared/api';
+import { apiFetch, downloadBlob, getDocumentViewUrl } from '../shared/api';
 import { computePhdLifecycleStage, copyValue, formatDateVN, PHD_LIFECYCLE_STAGES } from '../shared/format';
 import {
   Button,
@@ -157,6 +163,57 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
   const [docConfidential, setDocConfidential] = useState(false);
   const [driveUrl, setDriveUrl] = useState('');
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [lookingUpDoi, setLookingUpDoi] = useState(false);
+  const [coiResult, setCoiResult] = useState<{ target: string; valid: boolean; errors: any[]; warnings: any[] } | null>(null);
+
+  const handleLookupDoi = async () => {
+    if (!pubForm.doi_url.trim()) {
+      toast.error('Nhập mã DOI hoặc link https://doi.org/... trước.');
+      return;
+    }
+    setLookingUpDoi(true);
+    try {
+      const meta = await apiFetch<any>(`/api/publications/lookup-doi?doi=${encodeURIComponent(pubForm.doi_url.trim())}`);
+      setPubForm((prev) => ({
+        ...prev,
+        title: meta.title || prev.title,
+        authors: meta.authors || prev.authors,
+        venue: meta.venue || prev.venue,
+        pub_year: meta.pub_year ? String(meta.pub_year) : prev.pub_year,
+        doi_url: meta.doi_url || prev.doi_url,
+      }));
+      toast.success(`Đã tự điền từ ${meta.source.toUpperCase()}.`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLookingUpDoi(false);
+    }
+  };
+
+  const runCoiCheck = async (targetType: 'seminar' | 'independent_reviewer' | 'defense_council') => {
+    const members =
+      targetType === 'seminar'
+        ? semMembers
+        : targetType === 'defense_council'
+          ? defMembers
+          : [
+              form.ir1_scientist_id ? { scientist_id: Number(form.ir1_scientist_id) } : null,
+              form.ir2_scientist_id ? { scientist_id: Number(form.ir2_scientist_id) } : null,
+              form.ir3_scientist_id ? { scientist_id: Number(form.ir3_scientist_id) } : null,
+            ].filter(Boolean);
+    try {
+      const res = await apiFetch<any>('/api/check/coi', {
+        method: 'POST',
+        body: JSON.stringify({ phd_student_id: Number(id), target_type: targetType, members }),
+      });
+      setCoiResult({ target: targetType, ...res });
+      if (res.errors.length === 0 && res.warnings.length === 0) {
+        toast.success('Không phát hiện xung đột lợi ích hoặc thiếu chuẩn 3638.');
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
   const patchForm = (patch: Record<string, any>) => {
     setForm((prev: any) => ({ ...prev, ...patch }));
@@ -471,14 +528,62 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
           </div>
         </div>
 
-        {isStaff && (
-          <div className="flex items-center gap-2.5 shrink-0">
-            {dirty && <span className="text-xs text-amber-700 font-medium">Chưa lưu</span>}
-            <Button variant="primary" leadingIcon={<Save size={14} />} disabled={saving} onClick={handleSaveProfile}>
-              {saving ? 'Đang lưu...' : 'Lưu hồ sơ'}
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="secondary" leadingIcon={<FileText size={14} />}>
+                Biểu mẫu .docx
+                <ChevronDown size={13} className="text-slate-400" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-[250px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg text-xs">
+                <DropdownMenu.Item
+                  onSelect={() => downloadBlob(`/api/forms/phd/${phd.id}/compliance_3638`, `UET_Phieu3638_${phd.phd_code}.docx`).then(() => toast.success('Đã xuất Phiếu kiểm tra 3638.'))}
+                  className="flex items-center gap-2 px-2.5 py-2 rounded hover:bg-slate-100 text-slate-800 cursor-pointer outline-none"
+                >
+                  <FileText size={13} className="text-[#034ea1]" />
+                  <span>Phiếu kiểm tra điều kiện 3638</span>
+                </DropdownMenu.Item>
+                {isStaff && (
+                  <>
+                    <DropdownMenu.Item
+                      onSelect={() => downloadBlob(`/api/forms/phd/${phd.id}/committee_seminar`, `UET_ToTrinh_Seminar_${phd.phd_code}.docx`).then(() => toast.success('Đã xuất Tờ trình HĐ Seminar.'))}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded hover:bg-slate-100 text-slate-800 cursor-pointer outline-none"
+                    >
+                      <FileText size={13} className="text-slate-500" />
+                      <span>Tờ trình HĐ Seminar tổng thể</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() => downloadBlob(`/api/forms/phd/${phd.id}/committee_defense`, `UET_ToTrinh_HD_LATS_${phd.phd_code}.docx`).then(() => toast.success('Đã xuất Tờ trình HĐ Đánh giá LATS.'))}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded hover:bg-slate-100 text-slate-800 cursor-pointer outline-none"
+                    >
+                      <FileText size={13} className="text-slate-500" />
+                      <span>Tờ trình HĐ Đánh giá LATS</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="my-1 h-px bg-slate-100" />
+                    <DropdownMenu.Item
+                      onSelect={() => downloadBlob(`/api/forms/phd/${phd.id}/ir_invitation`, `UET_GiayMoi_PBDL_AnDanh_${phd.id}.docx`).then(() => toast.success('Đã xuất Giấy mời PBĐL ẩn danh.'))}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded hover:bg-amber-50 text-amber-900 cursor-pointer outline-none"
+                    >
+                      <Lock size={13} className="text-amber-700" />
+                      <span>Giấy mời PBĐL (Ẩn danh — Mật)</span>
+                    </DropdownMenu.Item>
+                  </>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+
+          {isStaff && (
+            <>
+              {dirty && <span className="text-xs text-amber-700 font-medium">Chưa lưu</span>}
+              <Button variant="primary" leadingIcon={<Save size={14} />} disabled={saving} onClick={handleSaveProfile}>
+                {saving ? 'Đang lưu...' : 'Lưu hồ sơ'}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Unified Light Progress & Key Deadlines Strip (Replaces 2 stacked heavy boxes) */}
@@ -973,7 +1078,12 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
                     <input value={pubForm.venue} onChange={(e) => setPubForm({ ...pubForm, venue: e.target.value })} />
                   </Field>
                   <Field label="DOI / Link minh chứng">
-                    <input value={pubForm.doi_url} onChange={(e) => setPubForm({ ...pubForm, doi_url: e.target.value })} />
+                    <div className="flex gap-1.5">
+                      <input value={pubForm.doi_url} onChange={(e) => setPubForm({ ...pubForm, doi_url: e.target.value })} placeholder="10.1109/..." />
+                      <Button type="button" size="sm" variant="secondary" disabled={lookingUpDoi} onClick={handleLookupDoi} title="Tự điền tên bài, tạp chí, năm từ DOI">
+                        <Search size={12} />
+                      </Button>
+                    </div>
                   </Field>
                   <div className="flex items-end">
                     <Button type="submit" variant="primary" className="w-full">Thêm công bố</Button>
@@ -1145,12 +1255,29 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
       {/* TAB 5: SEMINAR, HỘI ĐỒNG LATS & THẨM ĐỊNH */}
       {tab === 'seminar_defense' && (
         <Panel className="divide-y divide-slate-200">
+          {coiResult && (coiResult.target === 'seminar' || coiResult.target === 'defense_council') && (coiResult.errors.length > 0 || coiResult.warnings.length > 0) && (
+            <div className="px-5 py-3 bg-amber-50/40 space-y-1.5 text-xs">
+              {coiResult.errors.map((e, i) => (
+                <div key={`ce-${i}`} className="text-rose-700 font-medium flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0" /> {e.message}
+                </div>
+              ))}
+              {coiResult.warnings.map((w, i) => (
+                <div key={`cw-${i}`} className="text-amber-800 flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0" /> {w.message}
+                </div>
+              ))}
+            </div>
+          )}
           <SectionBlock
             title="Seminar tổng thể & Điều chỉnh đề tài"
             description="Đánh giá tổng thể luận án ở đơn vị chuyên môn (bảo vệ cấp cơ sở) và QĐ điều chỉnh tên đề tài nếu có."
             actions={
               isStaff ? (
                 <>
+                  <Button size="sm" variant="secondary" leadingIcon={<ShieldCheck size={13} />} onClick={() => runCoiCheck('seminar')}>
+                    Kiểm tra COI
+                  </Button>
                   <Button size="sm" variant="secondary" onClick={() => setSemMembers([...semMembers, { scientist_id: 0, member_role: 'member' }])}>
                     + Thành viên HĐ
                   </Button>
@@ -1228,6 +1355,9 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
             actions={
               isStaff ? (
                 <>
+                  <Button size="sm" variant="secondary" leadingIcon={<ShieldCheck size={13} />} onClick={() => runCoiCheck('defense_council')}>
+                    Kiểm tra COI & 3638
+                  </Button>
                   <Button size="sm" variant="secondary" onClick={() => setDefMembers([...defMembers, { scientist_id: 0, member_role: 'member' }])}>
                     + Thành viên HĐ
                   </Button>
@@ -1318,7 +1448,24 @@ export function PhdDetailPage({ user, catalogs }: { user: AuthUser; catalogs: Ap
               <Lock size={14} className="text-amber-700 shrink-0" />
               <span>Khu vực MẬT nội bộ Phòng CTSV — ẩn hoàn toàn với NCS và CBHD.</span>
             </span>
+            <Button size="sm" variant="tinted-warning" leadingIcon={<ShieldCheck size={13} />} onClick={() => runCoiCheck('independent_reviewer')}>
+              Kiểm tra xung đột PBĐL
+            </Button>
           </div>
+          {coiResult && coiResult.target === 'independent_reviewer' && (coiResult.errors.length > 0 || coiResult.warnings.length > 0) && (
+            <div className="px-5 py-3 border-b border-slate-200 bg-white space-y-1.5 text-xs">
+              {coiResult.errors.map((e, i) => (
+                <div key={`e-${i}`} className="text-rose-700 font-medium flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0" /> {e.message}
+                </div>
+              ))}
+              {coiResult.warnings.map((w, i) => (
+                <div key={`w-${i}`} className="text-amber-800 flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0" /> {w.message}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <Field label="Chọn PBĐL 1 (từ kho Cán bộ)">
               <select

@@ -11,7 +11,7 @@ import { db } from '../db';
 import { authenticateToken, isAdminOrStaff, requireRoles } from '../middlewares/auth';
 import { recordAudit } from '../services/audit';
 import { createNotification } from '../services/email';
-import { getRegulationConfig } from '../services/settings';
+import { getRegulationConfig, getRegulationConfigByVersionId } from '../services/settings';
 import type { AuthedRequest } from '../types';
 
 export const phdRouter = Router();
@@ -212,22 +212,24 @@ async function canAccessPhd(user: AuthUser, phdId: number): Promise<boolean> {
 }
 
 export async function loadEnrichedPhdDetail(phdId: number, viewer: AuthUser) {
-  const config = await getRegulationConfig();
   const canSeeConfidential = isAdminOrStaff(viewer);
 
   const row = (
     await db.execute({
       sql: `SELECT p.*, f.name as faculty_name, f.short_name as faculty_short_name, f.code as faculty_code,
-                   m.name as major_name, m.code as major_code
+                   m.name as major_name, m.code as major_code,
+                   COALESCE(p.regulation_version_id, c.regulation_version_id) as effective_reg_version_id
             FROM phd_students p
             LEFT JOIN faculties f ON f.id = p.faculty_id
             LEFT JOIN majors m ON m.id = p.major_id
+            LEFT JOIN cohorts c ON c.id = p.cohort_id OR (p.cohort_id IS NULL AND c.code = p.cohort)
             WHERE p.id = ?`,
       args: [phdId],
     })
   ).rows[0] as any;
 
   if (!row) return null;
+  const config = await getRegulationConfigByVersionId(row.effective_reg_version_id ? Number(row.effective_reg_version_id) : null);
 
   const [supsRes, committeesRes, pubsRes, reportsRes, docsRes] = await Promise.all([
     db.execute({
@@ -349,7 +351,7 @@ phdRouter.get('/api/phd-students/:id', authenticateToken, async (req: AuthedRequ
 });
 
 const PHD_MUTABLE_FIELDS = [
-  'phd_code', 'full_name', 'dob', 'gender', 'email', 'phone', 'faculty_id', 'major_id', 'cohort',
+  'phd_code', 'full_name', 'dob', 'gender', 'email', 'phone', 'faculty_id', 'major_id', 'cohort', 'cohort_id', 'regulation_version_id',
   'work_unit', 'admission_category', 'entrance_foreign_language', 'graduated_major_applied',
   'supplementary_courses', 'degree_verification_status', 'degree_verification_note',
   'enrollment_date', 'admission_decision_no', 'admission_decision_date',
@@ -377,7 +379,7 @@ function normalizePhdPayload(body: Record<string, any>) {
   const data: Record<string, any> = {};
   for (const field of PHD_MUTABLE_FIELDS) {
     if (body[field] !== undefined) {
-      if (['faculty_id', 'major_id', 'ir1_scientist_id', 'ir2_scientist_id', 'ir3_scientist_id', 'graduation_year'].includes(field)) {
+      if (['faculty_id', 'major_id', 'cohort_id', 'regulation_version_id', 'ir1_scientist_id', 'ir2_scientist_id', 'ir3_scientist_id', 'graduation_year'].includes(field)) {
         data[field] = body[field] === '' || body[field] === null ? null : Number(body[field]);
       } else if (field === 'accumulated_credits') {
         data[field] = Number(body[field]) || 0;
@@ -408,6 +410,34 @@ phdRouter.post('/api/phd-students', authenticateToken, requireRoles('admin', 'st
     return res.status(400).json({ error: 'Vui lòng nhập bắt buộc Mã NCS và Họ và tên.' });
   }
   const data = normalizePhdPayload(body);
+  // Auto-fill standard_deadline & max_deadline from matching cohort if omitted
+  if ((data.cohort_id || data.cohort) && (!data.standard_deadline || !data.max_deadline)) {
+    const cohortRow = (
+      await db.execute({
+        sql: data.cohort_id ? 'SELECT * FROM cohorts WHERE id = ? LIMIT 1' : 'SELECT * FROM cohorts WHERE code = ? LIMIT 1',
+        args: [data.cohort_id || data.cohort],
+      })
+    ).rows[0] as any;
+    if (cohortRow) {
+      if (!data.cohort_id) data.cohort_id = Number(cohortRow.id);
+      if (!data.regulation_version_id && cohortRow.regulation_version_id) {
+        data.regulation_version_id = Number(cohortRow.regulation_version_id);
+      }
+      const startIso = String(data.training_start_date || cohortRow.start_date || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(startIso)) {
+        const isBachelor = /đại học|cử nhân|kỹ sư/i.test(String(data.admission_category || ''));
+        const stdMonths = isBachelor ? Number(cohortRow.standard_months_bachelor || 48) : Number(cohortRow.standard_months_master || 36);
+        const maxMonths = isBachelor ? Number(cohortRow.max_months_bachelor || 84) : Number(cohortRow.max_months_master || 72);
+        const addMonths = (iso: string, months: number) => {
+          const d = new Date(`${iso}T00:00:00Z`);
+          d.setUTCMonth(d.getUTCMonth() + months);
+          return d.toISOString().slice(0, 10);
+        };
+        if (!data.standard_deadline) data.standard_deadline = addMonths(startIso, stdMonths);
+        if (!data.max_deadline) data.max_deadline = addMonths(startIso, maxMonths);
+      }
+    }
+  }
   try {
     const cols = Object.keys(data);
     const vals = Object.values(data);
@@ -709,11 +739,12 @@ phdRouter.post('/api/phd-students/:id/progress-reports', authenticateToken, asyn
 
   await db.execute({
     sql: `INSERT INTO phd_progress_reports (
-            phd_student_id, academic_term, report_date, thesis_progress_percent, summary,
+            phd_student_id, cycle_id, academic_term, report_date, thesis_progress_percent, summary,
             teaching_activities, next_plan, evidence_url, submitted_by_user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       phdId,
+      b.cycle_id ? Number(b.cycle_id) : null,
       String(b.academic_term).trim(),
       reportDate,
       pct,

@@ -6,9 +6,12 @@ import { authRouter } from './routes/auth.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
 import { documentsRouter } from './routes/documents.routes';
 import { excelRouter } from './routes/excel.routes';
+import { formsRouter } from './routes/forms.routes';
 import { healthRouter } from './routes/health.routes';
 import { notificationsRouter } from './routes/notifications.routes';
+import { paymentsRouter } from './routes/payments.routes';
 import { phdRouter } from './routes/phd.routes';
+import { requestsRouter } from './routes/requests.routes';
 import { scientistsRouter } from './routes/scientists.routes';
 import { settingsRouter } from './routes/settings.routes';
 
@@ -38,7 +41,10 @@ export async function createApp(options: { vite?: boolean } = {}) {
   app.use(scientistsRouter);
   app.use(documentsRouter);
   app.use(excelRouter);
+  app.use(formsRouter);
   app.use(notificationsRouter);
+  app.use(paymentsRouter);
+  app.use(requestsRouter);
   app.use(settingsRouter);
 
   app.use((err: any, req: any, res: any, next: any) => {

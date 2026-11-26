@@ -1,6 +1,7 @@
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   Bell,
   ChevronDown,
@@ -10,13 +11,22 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { HashRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import type { AuthUser, FacultyItem, MajorItem, Regulation3638Config } from '../shared/types';
+import type {
+  AuthUser,
+  CohortItem,
+  FacultyItem,
+  MajorItem,
+  Regulation3638Config,
+  RegulationVersionItem,
+  SystemBannerConfig,
+} from '../shared/types';
 import { CommandPalette } from './components/CommandPalette';
 import { DashboardPage } from './pages/DashboardPage';
 import { ImportExportPage } from './pages/ImportExportPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { PhdDetailPage } from './pages/PhdDetailPage';
 import { PhdListPage } from './pages/PhdListPage';
+import { RequestsPage } from './pages/RequestsPage';
 import { ScientistsPage } from './pages/ScientistsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SupervisorPortalPage } from './pages/SupervisorPortalPage';
@@ -28,27 +38,35 @@ export interface AppCatalogs {
   faculties: FacultyItem[];
   majors: MajorItem[];
   regulationConfig: Regulation3638Config | null;
+  regulationVersions?: RegulationVersionItem[];
+  cohorts?: CohortItem[];
+  systemBanner?: SystemBannerConfig | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Quản trị Phòng CTSV',
-  staff: 'Chuyên viên Phòng CTSV',
+  staff: 'Quản trị Phòng CTSV',
   supervisor: 'Cán bộ hướng dẫn',
   phd_student: 'Nghiên cứu sinh',
 };
 
-function TopNavLink({ to, label, active }: { to: string; label: string; active: boolean }) {
+function TopNavLink({ to, label, active, badge }: { to: string; label: string; active: boolean; badge?: number }) {
   return (
     <Link
       to={to}
       className={cn(
-        'h-10 inline-flex items-center px-3 text-[13px] border-b-2 transition-colors whitespace-nowrap',
+        'h-10 inline-flex items-center gap-1.5 px-3 text-[13px] border-b-2 transition-colors whitespace-nowrap',
         active
           ? 'border-[#034ea1] text-[#034ea1] font-semibold'
           : 'border-transparent text-slate-600 font-medium hover:text-slate-900'
       )}
     >
-      {label}
+      <span>{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="tabular text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -57,6 +75,7 @@ function AuthenticatedShell({
   user,
   catalogs,
   unreadCount,
+  pendingRequests,
   onRefreshCatalogs,
   onRefreshUnread,
   onLogout,
@@ -64,6 +83,7 @@ function AuthenticatedShell({
   user: AuthUser;
   catalogs: AppCatalogs;
   unreadCount: number;
+  pendingRequests: number;
   onRefreshCatalogs: () => Promise<void>;
   onRefreshUnread: () => Promise<void>;
   onLogout: () => void;
@@ -85,9 +105,11 @@ function AuthenticatedShell({
         ? `/ncs/${user.phd_student_id}`
         : '/notifications';
 
+  const banner = catalogs.systemBanner;
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc]">
-      {/* Restored Official UET Blue Header — Compact & Uncluttered */}
+      {/* Official UET Blue Header — Compact & Uncluttered */}
       <header className="uet-header text-white sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <Link to={defaultRoute} className="flex items-center gap-3 min-w-0 hover:opacity-95">
@@ -177,7 +199,7 @@ function AuthenticatedShell({
           </div>
         </div>
 
-        {/* Single Crisp Horizontal Navigation Strip (40px, fit-uet CampaignChrome rhythm) */}
+        {/* Single Crisp Horizontal Navigation Strip (Max 7 items) */}
         <nav className="bg-white border-b border-slate-200 text-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isStaff && !isSupervisorView && (
@@ -185,11 +207,10 @@ function AuthenticatedShell({
                 <TopNavLink to="/" label="Tổng quan" active={location.pathname === '/'} />
                 <TopNavLink to="/ncs" label="Nghiên cứu sinh" active={location.pathname.startsWith('/ncs')} />
                 <TopNavLink to="/scientists" label="Cán bộ & Hội đồng" active={location.pathname.startsWith('/scientists')} />
-                <TopNavLink to="/import" label="Excel" active={location.pathname.startsWith('/import')} />
+                <TopNavLink to="/requests" label="Phê duyệt" active={location.pathname.startsWith('/requests')} badge={pendingRequests} />
+                <TopNavLink to="/import" label="Thù lao & Excel" active={location.pathname.startsWith('/import')} />
                 <TopNavLink to="/notifications" label="Thông báo" active={location.pathname.startsWith('/notifications')} />
-                {user.role === 'admin' && (
-                  <TopNavLink to="/settings" label="Cài đặt 3638" active={location.pathname.startsWith('/settings')} />
-                )}
+                <TopNavLink to="/settings" label="Quản trị" active={location.pathname.startsWith('/settings')} />
               </>
             )}
 
@@ -197,6 +218,7 @@ function AuthenticatedShell({
               <>
                 <TopNavLink to="/supervisor" label="Trang CBHD" active={location.pathname === '/supervisor'} />
                 <TopNavLink to="/ncs?view=supervisor" label="NCS hướng dẫn" active={location.pathname.startsWith('/ncs')} />
+                <TopNavLink to="/requests" label="Phê duyệt" active={location.pathname.startsWith('/requests')} badge={pendingRequests} />
                 <TopNavLink to="/notifications" label="Thông báo" active={location.pathname.startsWith('/notifications')} />
               </>
             )}
@@ -206,12 +228,32 @@ function AuthenticatedShell({
                 {user.phd_student_id && (
                   <TopNavLink to={`/ncs/${user.phd_student_id}`} label="Hồ sơ của tôi" active={location.pathname.startsWith('/ncs')} />
                 )}
+                <TopNavLink to="/requests" label="Yêu cầu" active={location.pathname.startsWith('/requests')} />
                 <TopNavLink to="/notifications" label="Thông báo" active={location.pathname.startsWith('/notifications')} />
               </>
             )}
           </div>
         </nav>
       </header>
+
+      {/* Optional System Maintenance / Announcement Banner */}
+      {(banner?.maintenanceMode || banner?.bannerText) && (
+        <div
+          className={cn(
+            'border-b text-xs px-4 sm:px-6 py-2',
+            banner.maintenanceMode || banner.bannerTone === 'warning'
+              ? 'bg-amber-50 border-amber-200 text-amber-950'
+              : 'bg-[#eff5fc] border-[#d2e4f8] text-[#034ea1]'
+          )}
+        >
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+            <AlertTriangle size={13} className="shrink-0" />
+            <span>
+              {banner.maintenanceMode ? `[Chế độ bảo trì đang bật] ${banner.maintenanceMessage}` : banner.bannerText}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Airy Centered Workspace */}
       <main className="workspace-content flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
@@ -220,9 +262,10 @@ function AuthenticatedShell({
           <Route path="/ncs" element={<PhdListPage user={user} catalogs={catalogs} />} />
           <Route path="/ncs/:id" element={<PhdDetailPage user={user} catalogs={catalogs} />} />
           <Route path="/scientists" element={isStaff ? <ScientistsPage user={user} catalogs={catalogs} /> : <Navigate to={defaultRoute} replace />} />
+          <Route path="/requests" element={<RequestsPage user={user} onChanged={onRefreshUnread} />} />
           <Route path="/import" element={isStaff ? <ImportExportPage user={user} /> : <Navigate to={defaultRoute} replace />} />
           <Route path="/notifications" element={<NotificationsPage user={user} onUnreadChanged={onRefreshUnread} />} />
-          <Route path="/settings" element={user.role === 'admin' ? <SettingsPage catalogs={catalogs} onRefreshCatalogs={onRefreshCatalogs} /> : <Navigate to={defaultRoute} replace />} />
+          <Route path="/settings" element={isStaff ? <SettingsPage catalogs={catalogs} onRefreshCatalogs={onRefreshCatalogs} /> : <Navigate to={defaultRoute} replace />} />
           <Route path="/supervisor" element={user.scientist_id ? <SupervisorPortalPage user={user} catalogs={catalogs} /> : <Navigate to={defaultRoute} replace />} />
           <Route path="*" element={<Navigate to={defaultRoute} replace />} />
         </Routes>
@@ -252,7 +295,7 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, user: AuthUse
         setDevEnabled(Boolean(data.enabled));
         setDevAccounts(data.accounts || []);
       })
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
   const handleGoogleSuccess = async (cred: any) => {
@@ -352,6 +395,7 @@ export default function App() {
   });
   const [catalogs, setCatalogs] = useState<AppCatalogs>({ faculties: [], majors: [], regulationConfig: null });
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState(0);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('phdhub_token');
@@ -359,23 +403,33 @@ export default function App() {
     setToken(null);
     setUser(null);
     setUnreadCount(0);
+    setPendingRequests(0);
   }, []);
 
   const refreshCatalogs = useCallback(async () => {
     if (!localStorage.getItem('phdhub_token')) return;
     try {
       setCatalogs(await apiFetch<AppCatalogs>('/api/catalogs'));
-    } catch { }
+    } catch {}
   }, []);
 
   const refreshUnread = useCallback(async () => {
     if (!localStorage.getItem('phdhub_token')) return;
     try {
-      const data = await apiFetch<{ user: AuthUser; unreadNotifications: number }>('/api/auth/me');
+      const data = await apiFetch<{
+        user: AuthUser;
+        unreadNotifications: number;
+        pendingRequests?: number;
+        systemBanner?: SystemBannerConfig;
+      }>('/api/auth/me');
       setUser(data.user);
       localStorage.setItem('phdhub_user', JSON.stringify(data.user));
       setUnreadCount(data.unreadNotifications || 0);
-    } catch { }
+      setPendingRequests(data.pendingRequests || 0);
+      if (data.systemBanner) {
+        setCatalogs((prev) => ({ ...prev, systemBanner: data.systemBanner }));
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -408,6 +462,7 @@ export default function App() {
             user={user}
             catalogs={catalogs}
             unreadCount={unreadCount}
+            pendingRequests={pendingRequests}
             onRefreshCatalogs={refreshCatalogs}
             onRefreshUnread={refreshUnread}
             onLogout={handleLogout}

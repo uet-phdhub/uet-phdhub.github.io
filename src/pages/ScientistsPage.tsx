@@ -5,6 +5,9 @@ import {
   Copy,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
+  FileText,
   Lock,
   Plus,
   RotateCcw,
@@ -12,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { maskSecretValue } from '../../shared/permissions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -100,6 +104,31 @@ export function ScientistsPage({ user: _user, catalogs }: { user: AuthUser; cata
   });
   const [savingPub, setSavingPub] = useState(false);
   const [deletePubTarget, setDeletePubTarget] = useState<{ id: number; title: string } | null>(null);
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  const [lookingUpDoi, setLookingUpDoi] = useState(false);
+
+  const handleLookupSciDoi = async () => {
+    if (!pubForm.doi_url.trim()) {
+      toast.error('Nhập mã DOI trước.');
+      return;
+    }
+    setLookingUpDoi(true);
+    try {
+      const meta = await apiFetch<any>(`/api/publications/lookup-doi?doi=${encodeURIComponent(pubForm.doi_url.trim())}`);
+      setPubForm((prev) => ({
+        ...prev,
+        title: meta.title || prev.title,
+        venue: meta.venue || prev.venue,
+        pub_year: meta.pub_year ? String(meta.pub_year) : prev.pub_year,
+        doi_url: meta.doi_url || prev.doi_url,
+      }));
+      toast.success(`Đã điền từ ${meta.source.toUpperCase()}.`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLookingUpDoi(false);
+    }
+  };
 
   const regConfig = catalogs.regulationConfig || DEFAULT_REGULATION_3638_CONFIG;
 
@@ -522,42 +551,84 @@ export function ScientistsPage({ user: _user, catalogs }: { user: AuthUser; cata
         subtitle={selectedSci?.work_unit || selectedSci?.specialization}
         headerActions={
           selectedSci ? (
-            <Button size="sm" variant="secondary" leadingIcon={<Edit3 size={12} />} onClick={() => openEditModal(selectedSci)}>
-              Sửa
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="secondary"
+                leadingIcon={<FileText size={12} />}
+                onClick={() => downloadBlob(`/api/forms/scientist/${selectedSci.id}/cv-5y`, `UET_LLKH_5Nam_${selectedSci.id}.docx`).then(() => toast.success('Đã xuất Lý lịch KH 5 năm (.docx).'))}
+              >
+                LLKH .docx
+              </Button>
+              <Button size="sm" variant="secondary" leadingIcon={<Edit3 size={12} />} onClick={() => openEditModal(selectedSci)}>
+                Sửa
+              </Button>
+            </div>
           ) : null
         }
       >
         {selectedSci && (
           <div className="space-y-5 text-xs">
-            {/* Payment & Contact with 1-Click Copy */}
+            {/* Payment & Contact with Masking & 1-Click Copy (Audited) */}
             <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
               {[
-                { label: 'Email', value: selectedSci.email },
-                { label: 'Điện thoại', value: selectedSci.phone },
-                { label: 'Số tài khoản', value: selectedSci.bank_account, extra: selectedSci.bank_name },
-                { label: 'Số CCCD', value: selectedSci.cccd },
-                { label: 'Mã số thuế', value: selectedSci.tax_code },
-              ].map((row) => (
-                <div key={row.label} className="px-3.5 py-2 flex items-center justify-between gap-2">
-                  <span className="text-slate-500">{row.label}</span>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="mono font-medium text-slate-900 truncate">
-                      {row.value || '—'} {row.extra ? `(${row.extra})` : ''}
-                    </span>
-                    {row.value && (
-                      <button
-                        type="button"
-                        onClick={() => copyValue(row.value, row.label)}
-                        className="p-1 text-slate-400 hover:text-[#034ea1] cursor-pointer"
-                        title={`Chép ${row.label}`}
-                      >
-                        <Copy size={12} />
-                      </button>
-                    )}
+                { key: 'email', label: 'Email', value: selectedSci.email, sensitive: false },
+                { key: 'phone', label: 'Điện thoại', value: selectedSci.phone, sensitive: false },
+                { key: 'bank', label: 'Số tài khoản', value: selectedSci.bank_account, extra: selectedSci.bank_name, sensitive: true },
+                { key: 'cccd', label: 'Số CCCD', value: selectedSci.cccd, sensitive: true },
+                { key: 'tax', label: 'Mã số thuế', value: selectedSci.tax_code, sensitive: true },
+              ].map((row) => {
+                const revealKey = `${selectedSci.id}:${row.key}`;
+                const shown = !row.sensitive || Boolean(revealedKeys[revealKey]);
+                const displayVal = row.value ? (shown ? row.value : maskSecretValue(row.value)) : '—';
+                return (
+                  <div key={row.label} className="px-3.5 py-2 flex items-center justify-between gap-2">
+                    <span className="text-slate-500">{row.label}</span>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="mono font-medium text-slate-900 truncate">
+                        {displayVal} {row.extra ? `(${row.extra})` : ''}
+                      </span>
+                      {row.value && row.sensitive && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !shown;
+                            setRevealedKeys((prev) => ({ ...prev, [revealKey]: next }));
+                            if (next) {
+                              apiFetch('/api/audit/secret-access', {
+                                method: 'POST',
+                                body: JSON.stringify({ resource_type: 'scientist_financial', resource_id: selectedSci.id, action: `Xem ${row.label} của ${selectedSci.full_name}` }),
+                              }).catch(() => {});
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"
+                          title={shown ? 'Ẩn' : 'Hiện'}
+                        >
+                          {shown ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      )}
+                      {row.value && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            copyValue(row.value, row.label);
+                            if (row.sensitive) {
+                              apiFetch('/api/audit/secret-access', {
+                                method: 'POST',
+                                body: JSON.stringify({ resource_type: 'scientist_financial', resource_id: selectedSci.id, action: `Sao chép ${row.label} của ${selectedSci.full_name}` }),
+                              }).catch(() => {});
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-[#034ea1] cursor-pointer"
+                          title={`Chép ${row.label}`}
+                        >
+                          <Copy size={12} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Quota & 3638 Cards */}
@@ -600,6 +671,12 @@ export function ScientistsPage({ user: _user, catalogs }: { user: AuthUser; cata
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-800">Thêm bài báo</span>
                 <span className="mono font-semibold text-[#034ea1]">+{previewPoint}đ</span>
+              </div>
+              <div className="flex gap-1.5">
+                <input placeholder="Nhập DOI để tự điền (VD: 10.1109/...)" value={pubForm.doi_url} onChange={(e) => setPubForm({ ...pubForm, doi_url: e.target.value })} />
+                <Button type="button" size="sm" variant="secondary" disabled={lookingUpDoi} onClick={handleLookupSciDoi}>
+                  <Search size={12} />
+                </Button>
               </div>
               <input required placeholder="Tên bài báo..." value={pubForm.title} onChange={(e) => setPubForm({ ...pubForm, title: e.target.value })} />
               <div className="grid grid-cols-2 gap-2">

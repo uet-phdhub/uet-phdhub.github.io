@@ -123,6 +123,25 @@ export function NotificationsPage({ user, onUnreadChanged }: { user: AuthUser; o
                 <Button size="sm" variant="secondary" leadingIcon={<Clock size={13} />} disabled={busy} onClick={handleScanDeadlines}>
                   Quét nhắc hạn
                 </Button>
+                {adminData?.stats?.failed > 0 && (
+                  <Button
+                    size="sm"
+                    variant="tinted-warning"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        const res = await apiFetch('/api/notifications/retry-failed', { method: 'POST' });
+                        toast.success(`Đã đưa ${res.requeued} email lỗi về hàng đợi.`);
+                        await loadAll();
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Thử gửi lại lỗi ({adminData.stats.failed})
+                  </Button>
+                )}
                 <Button size="sm" variant="primary" leadingIcon={<RefreshCw size={13} />} disabled={busy} onClick={handleDrainQueue}>
                   Gửi hàng đợi
                 </Button>

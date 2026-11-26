@@ -677,7 +677,23 @@ export function PhdListPage({ user, catalogs }: { user: AuthUser; catalogs: AppC
               </select>
             </Field>
             <Field label="Khóa / Đợt">
-              <input value={createForm.cohort} onChange={(e) => setCreateForm({ ...createForm, cohort: e.target.value })} />
+              {catalogs.cohorts && catalogs.cohorts.length > 0 ? (
+                <select
+                  value={createForm.cohort}
+                  onChange={(e) => {
+                    const c = catalogs.cohorts?.find((x) => x.code === e.target.value);
+                    setCreateForm({
+                      ...createForm,
+                      cohort: e.target.value,
+                      training_start_date: c?.start_date || createForm.training_start_date,
+                    });
+                  }}
+                >
+                  {catalogs.cohorts.map((c) => <option key={c.id} value={c.code}>{c.code}</option>)}
+                </select>
+              ) : (
+                <input value={createForm.cohort} onChange={(e) => setCreateForm({ ...createForm, cohort: e.target.value })} />
+              )}
             </Field>
             <Field label="Đối tượng">
               <input value={createForm.admission_category} onChange={(e) => setCreateForm({ ...createForm, admission_category: e.target.value })} />

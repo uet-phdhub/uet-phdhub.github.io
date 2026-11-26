@@ -91,13 +91,19 @@ test('API health & role-based access: Admin, CTSV Staff, Supervisor, External Ex
   assert.equal((await reqJson('/api/dashboard/summary', {}, staff.token)).status, 200);
   assert.equal((await reqJson('/api/dashboard/summary', {}, phdStudent.token)).status, 403);
 
-  // Regulation settings writable only by Admin (not Staff)
-  const staffSettings = await reqJson(
+  // Per v2 governance: CTSV staff shares Admin permissions; Supervisor & PhD Student are forbidden (403)
+  const supSettings = await reqJson(
     '/api/settings/regulation-3638',
     { method: 'PUT', body: JSON.stringify({ standardHoursPerUnit: 60 }) },
-    staff.token
+    supervisor.token
   );
-  assert.equal(staffSettings.status, 403);
+  assert.equal(supSettings.status, 403);
+  const phdSettings = await reqJson(
+    '/api/settings/regulation-3638',
+    { method: 'PUT', body: JSON.stringify({ standardHoursPerUnit: 60 }) },
+    phdStudent.token
+  );
+  assert.equal(phdSettings.status, 403);
 });
 
 test('Confidentiality enforcement: Independent Reviewers (PBĐL) and Scientist CCCD/MST/Bank hidden from NCS & CBHD', async () => {

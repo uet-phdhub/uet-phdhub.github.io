@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import { MAX_DOCUMENT_BYTES } from '../config';
 import { authenticateToken, isAdminOrStaff, requireRoles } from '../middlewares/auth';
+import { recordSecretAccess } from '../services/audit';
 import {
   buildPhdTemplateWorkbook,
   buildScientistTemplateWorkbook,
@@ -124,6 +125,9 @@ excelRouter.get('/api/excel/export/phd-students', authenticateToken, requireRole
     req.user!
   );
   const includeConfidential = q.includeConfidential === 'true' && isAdminOrStaff(req.user!);
+  if (includeConfidential) {
+    await recordSecretAccess(req.user, 'ir_export', 'all', `Xuất Excel danh sách NCS kèm cột PBĐL mật (${items.length} hồ sơ)`, req);
+  }
   const buf = exportPhdListWorkbook(items, config, includeConfidential);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="UET_DanhSach_NCS_${new Date().toISOString().slice(0, 10)}.xlsx"`);
@@ -149,6 +153,13 @@ excelRouter.get('/api/excel/export/scientists', authenticateToken, requireRoles(
     defense_council: 'HD_DanhGia_LATS',
   };
   const label = names[listType] || 'CanBo';
+  await recordSecretAccess(
+    req.user,
+    listType === 'independent_reviewer' ? 'ir_export' : 'scientist_financial',
+    listType,
+    `Xuất Excel bảng kê Cán bộ & CCCD/MST/STK (${items.length} dòng)`,
+    req
+  );
   const buf = exportScientistPaymentWorkbook(items, label);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="UET_CanBo_ThanhToan_${label}_${new Date().toISOString().slice(0, 10)}.xlsx"`);

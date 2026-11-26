@@ -1,15 +1,23 @@
 import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
+import { getPermissionsForUser } from '../../shared/permissions';
+import type { AuthUser, UserRole } from '../../shared/types';
 import { ADMIN_EMAIL, ALLOW_DEV_LOGIN, GOOGLE_CLIENT_ID } from '../config';
 import { db } from '../db';
-import { authenticateToken, signAuthToken } from '../middlewares/auth';
+import { authenticateToken, isAdminOrStaff, signAuthToken } from '../middlewares/auth';
+import { recordAuthEvent } from '../services/audit';
+import { getSystemBannerConfig } from '../services/settings';
 import type { AuthedRequest } from '../types';
-import type { UserRole } from '../../shared/types';
 
 export const authRouter = Router();
 const oAuth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-async function resolveAndUpsertUserByEmail(emailInput: string, profileName?: string, picture?: string | null) {
+async function resolveAndUpsertUserByEmail(
+  emailInput: string,
+  profileName?: string,
+  picture?: string | null,
+  req?: any
+) {
   const email = String(emailInput || '').trim().toLowerCase();
   if (!email) throw { status: 400, message: 'Email không hợp lệ.' };
 
@@ -28,16 +36,24 @@ async function resolveAndUpsertUserByEmail(emailInput: string, profileName?: str
   const isWhitelisted = Boolean(isPrimaryAdmin || existingUser || scientist || phdStudent);
 
   if (!isWhitelisted) {
-    throw {
-      status: 403,
-      message: isVnuEmail
-        ? 'Email VNU này chưa được đăng ký trong danh sách Cán bộ, Nghiên cứu sinh hoặc Chuyên viên Phòng Công tác sinh viên. Vui lòng liên hệ Phòng CTSV.'
-        : 'Email ngoài @vnu.edu.vn chỉ được đăng nhập khi đã có trong danh mục Cán bộ/Chuyên gia hoặc Nghiên cứu sinh của hệ thống.',
-    };
+    const msg = isVnuEmail
+      ? 'Email VNU này chưa được đăng ký trong danh sách Cán bộ, Nghiên cứu sinh hoặc Quản trị Phòng Công tác sinh viên.'
+      : 'Email ngoài @vnu.edu.vn chỉ được đăng nhập khi đã có trong danh mục Cán bộ/Chuyên gia hoặc Nghiên cứu sinh.';
+    await recordAuthEvent(email, 'login_denied', 'Chưa nằm trong whitelist', req);
+    throw { status: 403, message: msg };
   }
 
   if (existingUser && Number(existingUser.active) === 0) {
+    await recordAuthEvent(email, 'login_denied', 'Tài khoản bị khóa', req);
     throw { status: 403, message: 'Tài khoản này đã bị vô hiệu hóa.' };
+  }
+
+  if (existingUser?.expires_at && String(existingUser.expires_at).trim()) {
+    const todayIso = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+    if (String(existingUser.expires_at).slice(0, 10) < todayIso) {
+      await recordAuthEvent(email, 'login_denied', 'Tài khoản tạm hết hạn', req);
+      throw { status: 403, message: 'Tài khoản tạm thời này đã hết hạn truy cập.' };
+    }
   }
 
   let role: UserRole;
@@ -57,13 +73,15 @@ async function resolveAndUpsertUserByEmail(emailInput: string, profileName?: str
   const displayName = existingUser?.name || scientist?.full_name || phdStudent?.full_name || profileName || email;
 
   let userId: number;
+  let tokenVersion = Number(existingUser?.token_version || 1);
   if (!existingUser) {
     const ins = await db.execute({
-      sql: `INSERT INTO users (email, name, picture, role, is_supervisor, scientist_id, phd_student_id, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      sql: `INSERT INTO users (email, name, picture, role, is_supervisor, scientist_id, phd_student_id, active, token_version, last_login_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, datetime('now', '+7 hours'))`,
       args: [email, displayName, picture || null, role, isSupervisor, scientistId, phdStudentId],
     });
     userId = Number(ins.lastInsertRowid);
+    tokenVersion = 1;
   } else {
     userId = Number(existingUser.id);
     await db.execute({
@@ -73,13 +91,14 @@ async function resolveAndUpsertUserByEmail(emailInput: string, profileName?: str
                 is_supervisor = ?,
                 scientist_id = ?,
                 phd_student_id = ?,
+                last_login_at = datetime('now', '+7 hours'),
                 updated_at = datetime('now', '+7 hours')
             WHERE id = ?`,
       args: [picture || null, role, isSupervisor, scientistId, phdStudentId, userId],
     });
   }
 
-  const user = {
+  const user: AuthUser = {
     id: userId,
     email,
     name: displayName,
@@ -88,7 +107,16 @@ async function resolveAndUpsertUserByEmail(emailInput: string, profileName?: str
     is_supervisor: isSupervisor,
     scientist_id: scientistId,
     phd_student_id: phdStudentId,
+    token_version: tokenVersion,
   };
+  user.permissions = getPermissionsForUser(user);
+
+  const bannerCfg = await getSystemBannerConfig();
+  if (bannerCfg.maintenanceMode && !isAdminOrStaff(user)) {
+    throw { status: 503, message: bannerCfg.maintenanceMessage || 'Hệ thống đang bảo trì. Vui lòng quay lại sau.' };
+  }
+
+  await recordAuthEvent(email, 'login_success', `Đăng nhập thành công (${role})`, req);
   const token = signAuthToken(user);
   return { token, user };
 }
@@ -119,7 +147,7 @@ authRouter.post('/api/auth/google', async (req, res) => {
       return res.status(400).json({ error: 'Token Google không hợp lệ.' });
     }
 
-    const session = await resolveAndUpsertUserByEmail(payload.email, payload.name, payload.picture || null);
+    const session = await resolveAndUpsertUserByEmail(payload.email, payload.name, payload.picture || null, req);
     return res.json(session);
   } catch (err: any) {
     if (err?.status) {
@@ -144,7 +172,6 @@ authRouter.get('/api/auth/dev-accounts', async (_req, res) => {
     `)
   ).rows as any[];
 
-  // Also include a sample scientist & phd_student if not yet in users table
   const seenEmails = new Set(users.map((u) => String(u.email).toLowerCase()));
   const sampleSci = (
     await db.execute(`SELECT id, email, full_name, title_display, is_internal FROM scientists WHERE email IS NOT NULL AND email != '' ORDER BY is_internal DESC, id ASC LIMIT 3`)
@@ -195,7 +222,7 @@ authRouter.post('/api/auth/dev-login', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Vui lòng chọn hoặc nhập email.' });
 
   try {
-    const session = await resolveAndUpsertUserByEmail(email);
+    const session = await resolveAndUpsertUserByEmail(email, undefined, null, req);
     return res.json(session);
   } catch (err: any) {
     return res.status(err?.status || 500).json({ error: err?.message || 'Đăng nhập thất bại.' });
@@ -204,14 +231,28 @@ authRouter.post('/api/auth/dev-login', async (req, res) => {
 
 authRouter.get('/api/auth/me', authenticateToken, async (req: AuthedRequest, res) => {
   const user = req.user!;
-  const unreadRow = (
-    await db.execute({
+  const [unreadRes, reqPendingRes, banner] = await Promise.all([
+    db.execute({
       sql: 'SELECT COUNT(*) as c FROM notifications WHERE lower(recipient_email) = ? AND is_read = 0',
       args: [user.email.toLowerCase()],
-    })
-  ).rows[0] as any;
+    }),
+    isAdminOrStaff(user)
+      ? db.execute("SELECT COUNT(*) as c FROM change_requests WHERE status IN ('submitted', 'supervisor_approved')")
+      : user.scientist_id
+        ? db.execute({
+            sql: `SELECT COUNT(*) as c FROM change_requests r
+                  WHERE r.status = 'submitted'
+                    AND EXISTS (SELECT 1 FROM phd_supervisions ps WHERE ps.phd_student_id = r.phd_student_id AND ps.scientist_id = ?)`,
+            args: [user.scientist_id],
+          })
+        : Promise.resolve({ rows: [{ c: 0 }] }),
+    getSystemBannerConfig(),
+  ]);
+
   res.json({
     user,
-    unreadNotifications: Number(unreadRow?.c || 0),
+    unreadNotifications: Number((unreadRes.rows[0] as any)?.c || 0),
+    pendingRequests: Number((reqPendingRes.rows[0] as any)?.c || 0),
+    systemBanner: banner,
   });
 });

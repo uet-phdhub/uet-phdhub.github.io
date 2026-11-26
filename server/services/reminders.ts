@@ -1,7 +1,7 @@
 import { computeDeadlinesCountdown, getVietnamTodayIso } from '../../shared/regulation3638';
 import { db } from '../db';
 import { createNotification } from './email';
-import { getRegulationConfig } from './settings';
+import { getRegulationConfig, renderEmailTemplate } from './settings';
 
 export async function scanAndQueueDeadlineReminders(actorUserId?: number | null) {
   const config = await getRegulationConfig();
@@ -53,8 +53,21 @@ export async function scanAndQueueDeadlineReminders(actorUserId?: number | null)
     ];
     for (const chk of trainingChecks) {
       if (['warning', 'urgent', 'overdue'].includes(chk.metric.level)) {
-        const subject = `[UET PhDHub] Nhắc ${chk.label}: ${phd.full_name} (${phd.phd_code}) — ${chk.metric.label}`;
-        const body = `Nghiên cứu sinh ${phd.full_name} (Mã NCS: ${phd.phd_code}) có mốc ${chk.label} là ngày ${chk.metric.date} (${chk.metric.label}). Đề nghị rà soát tiến độ đào tạo, hoàn thiện thủ tục gia hạn hoặc chuẩn bị hồ sơ bảo vệ theo quy định.`;
+        const rendered = await renderEmailTemplate(
+          'deadline_standard',
+          {
+            kind_label: chk.label,
+            full_name: phd.full_name,
+            phd_code: phd.phd_code,
+            deadline: chk.metric.date,
+            days_label: chk.metric.label,
+          },
+          {
+            subject: `[UET PhDHub] Nhắc ${chk.label}: ${phd.full_name} (${phd.phd_code}) — ${chk.metric.label}`,
+            body: `Nghiên cứu sinh ${phd.full_name} (Mã NCS: ${phd.phd_code}) có mốc ${chk.label} là ngày ${chk.metric.date} (${chk.metric.label}).`,
+          }
+        );
+        const { subject, body } = rendered;
 
         const recipients = new Set<string>();
         if (phd.email) recipients.add(String(phd.email).toLowerCase());
@@ -81,8 +94,20 @@ export async function scanAndQueueDeadlineReminders(actorUserId?: number | null)
 
     // 2. Output Foreign Language Review Deadline -> notify NCS + CTSV Staff
     if (['warning', 'urgent', 'overdue'].includes(dl.outputFlReview.level)) {
-      const subject = `[UET PhDHub] Nhắc hạn xét lại CĐR Ngoại ngữ: ${phd.full_name} (${phd.phd_code})`;
-      const body = `Nghiên cứu sinh ${phd.full_name} (${phd.phd_code}) có thời hạn xét lại Chuẩn đầu ra Ngoại ngữ vào ngày ${dl.outputFlReview.date} (${dl.outputFlReview.label}). Vui lòng cập nhật chứng chỉ ngoại ngữ đạt chuẩn trước thời hạn.`;
+      const rendered = await renderEmailTemplate(
+        'deadline_fl',
+        {
+          full_name: phd.full_name,
+          phd_code: phd.phd_code,
+          deadline: dl.outputFlReview.date,
+          days_label: dl.outputFlReview.label,
+        },
+        {
+          subject: `[UET PhDHub] Nhắc hạn xét lại CĐR Ngoại ngữ: ${phd.full_name} (${phd.phd_code})`,
+          body: `Nghiên cứu sinh ${phd.full_name} (${phd.phd_code}) có thời hạn xét lại Chuẩn đầu ra Ngoại ngữ vào ngày ${dl.outputFlReview.date} (${dl.outputFlReview.label}).`,
+        }
+      );
+      const { subject, body } = rendered;
       const recipients = new Set<string>();
       if (phd.email) recipients.add(String(phd.email).toLowerCase());
       staffRows.forEach((st) => recipients.add(st.email.toLowerCase()));
@@ -106,8 +131,20 @@ export async function scanAndQueueDeadlineReminders(actorUserId?: number | null)
 
     // 3. Independent Review Due Date -> STRICTLY CONFIDENTIAL: ONLY CTSV Admin & Staff!
     if (dl.irDue && ['warning', 'urgent', 'overdue'].includes(dl.irDue.level)) {
-      const subject = `[MẬT - Phòng CTSV] Hạn nhận xét Phản biện độc lập: ${phd.full_name} (${phd.phd_code})`;
-      const body = `[Thông báo nội bộ Phòng CTSV] Hồ sơ NCS ${phd.full_name} (${phd.phd_code}) có hạn nộp nhận xét Phản biện độc lập ngày ${dl.irDue.date} (${dl.irDue.label}). Vui lòng đôn đốc phản biện độc lập (không chuyển tiếp thông tin mật này tới NCS/CBHD).`;
+      const rendered = await renderEmailTemplate(
+        'deadline_ir',
+        {
+          full_name: phd.full_name,
+          phd_code: phd.phd_code,
+          deadline: dl.irDue.date,
+          days_label: dl.irDue.label,
+        },
+        {
+          subject: `[MẬT - Phòng CTSV] Hạn nhận xét Phản biện độc lập: ${phd.full_name} (${phd.phd_code})`,
+          body: `[Thông báo nội bộ Phòng CTSV] Hồ sơ NCS ${phd.full_name} (${phd.phd_code}) có hạn nộp nhận xét Phản biện độc lập ngày ${dl.irDue.date} (${dl.irDue.label}).`,
+        }
+      );
+      const { subject, body } = rendered;
 
       for (const st of staffRows) {
         const email = st.email.toLowerCase();

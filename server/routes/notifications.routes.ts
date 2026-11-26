@@ -144,6 +144,13 @@ notificationsRouter.post('/api/notifications/process-queue', authenticateToken, 
   res.json(result);
 });
 
+notificationsRouter.post('/api/notifications/retry-failed', authenticateToken, requireRoles('admin', 'staff'), async (req: AuthedRequest, res) => {
+  const upd = await db.execute("UPDATE notifications SET status = 'queued', error = NULL WHERE status = 'failed'");
+  const queueRes = await sendQueuedNotificationBatch({ ignoreBatchSize: false });
+  await recordAudit(req.user, 'retry_failed_emails', 'notifications', 'failed', `Đưa ${upd.rowsAffected || 0} email lỗi về hàng đợi`);
+  res.json({ requeued: upd.rowsAffected || 0, ...queueRes });
+});
+
 // Cron endpoints for GitHub Actions (07:05 Vietnam daily)
 function verifyCronSecret(req: any, res: any): boolean {
   const expected = process.env.CRON_SECRET;
