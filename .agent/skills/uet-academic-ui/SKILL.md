@@ -6,7 +6,7 @@ description: Design system and anti-AI-slop UI/UX standard for UET PhDHub (Hệ 
 # UET PhDHub — Institutional Academic UI Standard
 
 ## 1. Core Aesthetic Philosophy (Anti-AI-Slop & Anti-Clutter)
-- **Authentic UET Top Chrome (from `fit-uet`)**: Compact official UET blue gradient top bar (`linear-gradient(110deg, #064889 0%, #075fc7 62%, #1473e6 100%)`, `h-14`) with the crisp white horizontal UET wordmark (`uet-logo-white.png`, `h-8 w-auto`) + single 40px crisp white horizontal underline nav bar (`max-w-7xl mx-auto`). **NO** 240px left sidebar, **NO** breadcrumb trails, **NO** split dark-navy SaaS marketing login screens.
+- **Authentic UET Top Chrome (from `fit-uet`)**: Compact official UET blue gradient top bar (`linear-gradient(110deg, #064889 0%, #075fc7 62%, #1473e6 100%)`, `h-14`) with the crisp circular UET emblem (`logo_uet.webp`, `w-9 h-9 rounded-full bg-white`) paired with real crisp HTML text (`ĐẠI HỌC QUỐC GIA HÀ NỘI` / `TRƯỜNG ĐẠI HỌC CÔNG NGHỆ` / `VNU UNIVERSITY OF ENGINEERING AND TECHNOLOGY`) — never blurry rasterized wordmarks or extra app subtitle text in the header — plus a single 40px crisp white horizontal underline nav bar (`max-w-7xl mx-auto`). **NO** 240px left sidebar, **NO** breadcrumb trails, **NO** split dark-navy SaaS marketing login screens.
 - **Radical Text Restraint**:
   - One page title once; **zero** repeating descriptive subtitles under headings.
   - **Zero** explanatory helper paragraphs next to form groups.

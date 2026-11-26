@@ -50,6 +50,29 @@ const ROLE_LABELS: Record<string, string> = {
   phd_student: 'Nghiên cứu sinh',
 };
 
+function UetBrand() {
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <img
+        src={`${import.meta.env.BASE_URL}logo_uet.webp`}
+        alt="Logo Trường Đại học Công nghệ - ĐHQGHN"
+        className="w-10 h-10 rounded-full bg-white p-[1.5px] object-contain shrink-0 shadow-xs"
+      />
+      <div className="flex flex-col justify-center min-w-0 select-none">
+        <span className="text-[9.5px] leading-[12px] font-semibold tracking-[0.06em] text-white/90 uppercase truncate">
+          Đại học Quốc gia Hà Nội
+        </span>
+        <span className="text-[13.5px] sm:text-[14.5px] leading-[19px] font-bold tracking-[0.025em] text-white uppercase truncate">
+          Trường Đại học Công nghệ
+        </span>
+        <span className="hidden sm:block text-[8.5px] leading-[11px] font-medium tracking-[0.045em] text-white/80 uppercase truncate">
+          VNU University of Engineering and Technology
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function TopNavLink({ to, label, active, badge }: { to: string; label: string; active: boolean; badge?: number }) {
   return (
     <Link
@@ -112,16 +135,8 @@ function AuthenticatedShell({
       {/* Official UET Blue Header — Compact & Uncluttered */}
       <header className="uet-header text-white sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <Link to={defaultRoute} className="flex items-center gap-3 min-w-0 hover:opacity-95">
-            <img
-              src={`${import.meta.env.BASE_URL}uet-logo-white.png`}
-              alt="Trường Đại học Công nghệ - ĐHQGHN"
-              className="h-8 w-auto object-contain shrink-0"
-            />
-            <span className="hidden sm:inline-block h-5 w-px bg-white/25" />
-            <span className="hidden sm:inline text-[13px] font-semibold text-white/95 truncate">
-              Quản lý Nghiên cứu sinh
-            </span>
+          <Link to={defaultRoute} className="min-w-0 hover:opacity-95 transition-opacity">
+            <UetBrand />
           </Link>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -295,7 +310,7 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, user: AuthUse
         setDevEnabled(Boolean(data.enabled));
         setDevAccounts(data.accounts || []);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleGoogleSuccess = async (cred: any) => {
@@ -332,10 +347,8 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string, user: AuthUse
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc]">
       <header className="uet-header text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-          <img src={`${import.meta.env.BASE_URL}uet-logo-white.png`} alt="UET VNU" className="h-8 w-auto object-contain" />
-          <span className="h-5 w-px bg-white/25" />
-          <span className="text-[13px] font-semibold">Quản lý Nghiên cứu sinh</span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center">
+          <UetBrand />
         </div>
       </header>
 
@@ -410,7 +423,7 @@ export default function App() {
     if (!localStorage.getItem('phdhub_token')) return;
     try {
       setCatalogs(await apiFetch<AppCatalogs>('/api/catalogs'));
-    } catch {}
+    } catch { }
   }, []);
 
   const refreshUnread = useCallback(async () => {
@@ -429,7 +442,7 @@ export default function App() {
       if (data.systemBanner) {
         setCatalogs((prev) => ({ ...prev, systemBanner: data.systemBanner }));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
