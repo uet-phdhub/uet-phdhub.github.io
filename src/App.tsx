@@ -52,21 +52,18 @@ const ROLE_LABELS: Record<string, string> = {
 
 function UetBrand() {
   return (
-    <div className="flex items-center gap-3 min-w-0">
+    <div className="flex items-center gap-2.5 min-w-0">
       <img
         src={`${import.meta.env.BASE_URL}logo_uet.webp`}
         alt="Logo Trường Đại học Công nghệ - ĐHQGHN"
-        className="w-10 h-10 rounded-full bg-white p-[1.5px] object-contain shrink-0 shadow-xs"
+        className="w-9 h-9 rounded-full bg-white p-[1.5px] object-contain shrink-0 shadow-xs"
       />
-      <div className="flex flex-col justify-center min-w-0 select-none">
-        <span className="text-[9.5px] leading-[12px] font-semibold tracking-[0.06em] text-white/90 uppercase truncate">
+      <div className="flex flex-col justify-center gap-0.5 min-w-0 select-none">
+        <span className="text-[10px] leading-[13px] font-semibold tracking-[0.06em] text-white/85 uppercase truncate">
           Đại học Quốc gia Hà Nội
         </span>
-        <span className="text-[13.5px] sm:text-[14.5px] leading-[19px] font-bold tracking-[0.025em] text-white uppercase truncate">
+        <span className="text-[14px] sm:text-[15px] leading-[20px] font-bold tracking-[0.025em] text-white uppercase truncate">
           Trường Đại học Công nghệ
-        </span>
-        <span className="hidden sm:block text-[8.5px] leading-[11px] font-medium tracking-[0.045em] text-white/80 uppercase truncate">
-          VNU University of Engineering and Technology
         </span>
       </div>
     </div>
